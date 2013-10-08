@@ -134,7 +134,7 @@ function Game(iIface) {
     this.TILE_WIDTH = 16;
     this.numTiles = {x:3, y:3};
     this.worldPx = {x:this.TILE_WIDTH * this.numTiles.x, y:this.TILE_WIDTH * this.numTiles.y};
-    this.numMines = 2;
+    this.numMines = 1;
 
 
     this.frameNumber = 0;
@@ -149,7 +149,7 @@ function Game(iIface) {
     for (var i = 0; i < this.numTiles.x; i++) {
         this.gameGrid[i] = [];
         for (var j = 0; j < this.numTiles.y; j++) {
-            this.gameGrid[i][j] = {state:'blank', mine:false};
+            this.gameGrid[i][j] = {state:'blank', mine:false, opened:false, adj:0};
         }
 
     }
@@ -160,6 +160,18 @@ function Game(iIface) {
         console.log('Mine at: ' + mineX + ',' + mineY);
         this.gameGrid[mineX][mineY].mine = true;
     }
+
+    for (var i = 0; i < this.numTiles.x; i++) {
+        for (var j = 0; j < this.numTiles.y; j++) {
+            this.gameGrid[i][j].adj = this.countSurrounding(i, j);
+            console.log(this.gameGrid[i][j].adj + ', ');
+        }
+
+    }
+
+    this.gameState = 'alive';
+    this.face = 'facesmile';
+    this.winCountdown = (this.numTiles.x * this.numTiles.y) - this.numMines;
 
 }
 
@@ -179,9 +191,74 @@ Game.prototype.updateContainer = function() {
 
 Game.prototype.checkInGrid = function(iX, iY) {
  return (-1 < iX && iX < this.numTiles.x) && (-1 < iY && iY < this.numTiles.y );
-}
+};
+
+Game.prototype.showMines = function () {
+    for (var i = 0; i < this.numTiles.x; i++) {
+        for (var j = 0; j < this.numTiles.y; j++) {
+            if (this.gameGrid[i][j].mine) {
+                this.gameGrid[i][j].state = 'bombrevealed';
+            }
+        }
+
+    }
+
+};
+
+Game.prototype.countSurrounding = function (iX, iY) {
+    //count surrounding mines
+    var mineCount = 0;
+    var mineWalk = [{x:-1, y:-1},{x:0, y:-1},{x:1, y:-1},{x:1, y:0},{x:1, y:1},{x:0, y:1},{x:-1, y:1},{x:-1, y:0}];
+
+    for (var walkIdx = 0; walkIdx < mineWalk.length; walkIdx++) {
+        var tX = mineWalk[walkIdx].x + iX;
+        var tY = mineWalk[walkIdx].y + iY;
+
+        //            console.log('check ' + tX + ',' + tY);
+        if (this.checkInGrid(tX, tY)){
+            if (this.gameGrid[tX][tY].mine == true) {
+                mineCount++;
+            }
+        }
+    }
+
+    return mineCount;
+};
+
+Game.prototype.openSurrounding = function (iX, iY) {
+    //count surrounding mines
+    var mineCount = 0;
+    var mineWalk = [{x:-1, y:-1},{x:0, y:-1},{x:1, y:-1},{x:1, y:0},{x:1, y:1},{x:0, y:1},{x:-1, y:1},{x:-1, y:0}];
+
+    for (var walkIdx = 0; walkIdx < mineWalk.length; walkIdx++) {
+        var tX = mineWalk[walkIdx].x + iX;
+        var tY = mineWalk[walkIdx].y + iY;
+
+        //            console.log('check ' + tX + ',' + tY);
+        if (this.checkInGrid(tX, tY)){
+            if (this.gameGrid[tX][tY].mine == true) {
+                mineCount++;
+            }
+        }
+    }
+
+    this.gameGrid[iX][iY].state = 'open' + mineCount;
+
+    this.winCountdown--;
+
+    if (this.winCountdown <= 0) {
+        this.gameState = 'win'
+        this.face = 'facewin';
+        this.showMines();
+    }
+};
 
 Game.prototype.clickAt = function (iX, iY) {
+
+    if (this.gameState != 'alive') {
+        return;
+    }
+
     // Handle grid clicks
 
     var gridX = Math.floor((iX + (this.worldPx.x/2) - this.vpOffset.x)/ this.TILE_WIDTH);
@@ -192,27 +269,13 @@ Game.prototype.clickAt = function (iX, iY) {
 
         //BOOM?
         if (this.gameGrid[gridX][gridY].mine == true) {
-            mineCount++;
+//            mineCount++;
             this.gameGrid[gridX][gridY].state = 'bombdeath';
+            this.gameState = 'dead';
+            this.face = 'facedead';
         } else {
+            this.openSurrounding(gridX, gridY);
 
-            //count surrounding mines
-            var mineCount = 0;
-            var mineWalk = [{x:-1, y:-1},{x:0, y:-1},{x:1, y:-1},{x:1, y:0},{x:1, y:1},{x:0, y:1},{x:-1, y:1},{x:-1, y:0}];
-
-            for (var walkIdx = 0; walkIdx < mineWalk.length; walkIdx++) {
-                var tX = mineWalk[walkIdx].x + gridX;
-                var tY = mineWalk[walkIdx].y + gridY;
-
-    //            console.log('check ' + tX + ',' + tY);
-                if (this.checkInGrid(tX, tY)){
-                    if (this.gameGrid[tX][tY].mine == true) {
-                        mineCount++;
-                    }
-                }
-            }
-
-            this.gameGrid[gridX][gridY].state = 'open' + mineCount;
         }
 
     }
@@ -318,12 +381,10 @@ Game.prototype.drawAnimate = function() {
     this.ctx.fillStyle = this.OUT_OF_WORLD_COLOR;
     this.ctx.fillRect(0,0,this.viewPortWidth,this.viewPortHeight);
 
-
-    // Negligible savings if a more sophisticated tiling strategy is used. So KISS.
-    // It seems for the browsers we want, they clip off-screen drawing anyway.
     var curX = 0;
     var curY = 0;
 
+    // Draw grid
     for (var cTileX = 0; cTileX < this.numTiles.x; cTileX++) {
         curX = (cTileX * this.TILE_WIDTH) - centeringX;
         for (var cTileY = 0; cTileY < this.numTiles.y; cTileY++) {
@@ -332,6 +393,13 @@ Game.prototype.drawAnimate = function() {
             this.ctx.drawImage(this.images[state], offsetX + curX, offsetY + curY);
         }
     }
+
+    this.FACE_WIDTH = 26;
+    this.GRID_BORDER_PX_BOT = 16;
+    // Draw Face
+    var faceX = offsetX - (this.FACE_WIDTH/2);
+    var faceY = offsetY - (this.FACE_WIDTH) - (this.worldPx.y/2) - this.GRID_BORDER_PX_BOT;
+    this.ctx.drawImage(this.images[this.face], faceX, faceY);
 
 };
 
