@@ -132,8 +132,9 @@ function Game(iIface) {
 //    this.numTiles = 3;
     // jpg size is 251, but we set 250 so get 1px overlap - firefox rendering glitch or we see gaps between tiles
     this.TILE_WIDTH = 16;
-    this.numTiles = 3;
-    this.worldPx = this.TILE_WIDTH * this.numTiles;
+    this.numTiles = {x:3, y:3};
+    this.worldPx = {x:this.TILE_WIDTH * this.numTiles.x, y:this.TILE_WIDTH * this.numTiles.y};
+    this.numMines = 2;
 
 
     this.frameNumber = 0;
@@ -142,6 +143,23 @@ function Game(iIface) {
 
     // Set start position
     this.vpOffset = {x: 0, y: 0};
+
+    this.gameGrid = [];
+
+    for (var i = 0; i < this.numTiles.x; i++) {
+        this.gameGrid[i] = [];
+        for (var j = 0; j < this.numTiles.y; j++) {
+            this.gameGrid[i][j] = {state:'open0', mine:false};
+        }
+
+    }
+
+    for (var mineIdx = 0; mineIdx < this.numMines; mineIdx++) {
+        var mineX = Math.floor(Math.random() * this.numTiles.x);
+        var mineY = Math.floor(Math.random() * this.numTiles.y);
+        console.log('Mine at: ' + mineX + ',' + mineY);
+        this.gameGrid[mineX][mineY].mine = true;
+    }
 
 }
 
@@ -160,6 +178,20 @@ Game.prototype.updateContainer = function() {
 };
 
 Game.prototype.clickAt = function (iX, iY) {
+    // Handle grid clicks
+
+    var gridX = Math.floor((iX + (this.worldPx.x/2) - this.vpOffset.x)/ this.TILE_WIDTH);
+    var gridY = Math.floor((iY + (this.worldPx.y/2) - this.vpOffset.y)/ this.TILE_WIDTH);
+
+    if ((-1 < gridX && gridX < this.numTiles.x) && (-1 < gridY && gridY < this.numTiles.y ))  {
+        console.log('in');
+
+        this.gameGrid[gridX][gridY].state = 'open1';
+
+
+    }
+
+    console.log({x:gridX, y:gridY});
 
 };
 
@@ -253,6 +285,9 @@ Game.prototype.drawAnimate = function() {
     var offsetX = this.vpOffset.x;
     var offsetY = this.vpOffset.y;
 
+    var centeringX = this.worldPx.x/2;
+    var centeringY = this.worldPx.y/2;
+
     this.ctx.save();
     this.ctx.fillStyle = this.OUT_OF_WORLD_COLOR;
     this.ctx.fillRect(0,0,this.viewPortWidth,this.viewPortHeight);
@@ -262,11 +297,13 @@ Game.prototype.drawAnimate = function() {
     // It seems for the browsers we want, they clip off-screen drawing anyway.
     var curX = 0;
     var curY = 0;
-    for (var cTileX = 0; cTileX < this.numTiles; cTileX++) {
-        curX = cTileX * this.TILE_WIDTH;
-        for (var cTileY = 0; cTileY < this.numTiles; cTileY++) {
-            curY = cTileY * this.TILE_WIDTH;
-            this.ctx.drawImage(this.images['blank'], offsetX + curX, offsetY + curY);
+
+    for (var cTileX = 0; cTileX < this.numTiles.x; cTileX++) {
+        curX = (cTileX * this.TILE_WIDTH) - centeringX;
+        for (var cTileY = 0; cTileY < this.numTiles.y; cTileY++) {
+            curY = (cTileY * this.TILE_WIDTH) - centeringY;
+            state = this.gameGrid[cTileX][cTileY].state;
+            this.ctx.drawImage(this.images[state], offsetX + curX, offsetY + curY);
         }
     }
 
@@ -275,9 +312,8 @@ Game.prototype.drawAnimate = function() {
 Game.prototype.draw = function() {
     // draw here to canvas
     var NUM_DRAW_BUFFERS = 5;
-    if (this.animateToon || this.frameNumber < NUM_DRAW_BUFFERS || this.dragOn) {
-        this.drawAnimate();
-        this.frameNumber++;
-    }
+
+    this.drawAnimate();
+    this.frameNumber++;
 
 };
