@@ -53,32 +53,6 @@ function TheGame() {
     game.start();
 }
 
-function smoothstep(a, b, t)
-    /*
-     **  Usage:
-     **      smoothstep(a,b,t)
-     **
-     **  Arguments:
-     **      a       upper bound, real
-     **      b       lower bound, real
-     **      t       value, real
-     **
-     **  Returns:
-     **      0 when (t < a), 1 when (t >= b),
-     **      a smooth transition from 0 to 1 otherwise,
-     **      or (-1) on error (a == b)
-     **
-     **  GMLscripts.com
-     */
-{
-    var p;
-    if (t < a) return 0;
-    if (t >= b) return 1;
-    if (a == b) return -1;
-    p = (t - a) / (b - a);
-    return (p * p * (3 - 2 * p));
-}
-
 function Game(iIface) {
     this.iface = iIface;
 
@@ -132,9 +106,9 @@ function Game(iIface) {
 //    this.numTiles = 3;
     // jpg size is 251, but we set 250 so get 1px overlap - firefox rendering glitch or we see gaps between tiles
     this.TILE_WIDTH = 16;
-    this.numTiles = {x:3, y:3};
+    this.numTiles = {x:4, y:4};
     this.worldPx = {x:this.TILE_WIDTH * this.numTiles.x, y:this.TILE_WIDTH * this.numTiles.y};
-    this.numMines = 1;
+    this.numMines = 2;
 
 
     this.frameNumber = 0;
@@ -149,7 +123,7 @@ function Game(iIface) {
     for (var i = 0; i < this.numTiles.x; i++) {
         this.gameGrid[i] = [];
         for (var j = 0; j < this.numTiles.y; j++) {
-            this.gameGrid[i][j] = {state:'blank', mine:false, opened:false, adj:0};
+            this.gameGrid[i][j] = {state:'blank', mine:false, opened:false, adj:0, dirty:false};
         }
 
     }
@@ -205,6 +179,16 @@ Game.prototype.showMines = function () {
 
 };
 
+Game.prototype.unDirty = function () {
+    for (var i = 0; i < this.numTiles.x; i++) {
+        for (var j = 0; j < this.numTiles.y; j++) {
+            this.gameGrid[i][j].dirty = false;
+        }
+
+    }
+
+};
+
 Game.prototype.countSurrounding = function (iX, iY) {
     //count surrounding mines
     var mineCount = 0;
@@ -226,31 +210,44 @@ Game.prototype.countSurrounding = function (iX, iY) {
 };
 
 Game.prototype.openSurrounding = function (iX, iY) {
+    if (this.gameGrid[iX][iY].dirty != true) {
+        this.gameGrid[iX][iY].dirty = true;
+    } else {
+        return;
+    }
+
     //count surrounding mines
-    var mineCount = 0;
     var mineWalk = [{x:-1, y:-1},{x:0, y:-1},{x:1, y:-1},{x:1, y:0},{x:1, y:1},{x:0, y:1},{x:-1, y:1},{x:-1, y:0}];
 
-    for (var walkIdx = 0; walkIdx < mineWalk.length; walkIdx++) {
-        var tX = mineWalk[walkIdx].x + iX;
-        var tY = mineWalk[walkIdx].y + iY;
 
-        //            console.log('check ' + tX + ',' + tY);
-        if (this.checkInGrid(tX, tY)){
-            if (this.gameGrid[tX][tY].mine == true) {
-                mineCount++;
+    if (this.gameGrid[iX][iY].adj == 0) {
+        for (var walkIdx = 0; walkIdx < mineWalk.length; walkIdx++) {
+            var tX = mineWalk[walkIdx].x + iX;
+            var tY = mineWalk[walkIdx].y + iY;
+
+            //            console.log('check ' + tX + ',' + tY);
+            if (this.checkInGrid(tX, tY)){
+                if (this.gameGrid[tX][tY].adj == 0) {
+                    if (this.gameGrid[tX][tY].mine != true) {
+                        if (this.gameGrid[tX][tY].dirty != true) {
+                            this.openSurrounding(tX, tY);
+                        }
+                    }
+                } else if (this.gameGrid[tX][tY].mine != true){
+                    if (this.gameGrid[tX][tY].dirty != true) {
+                        this.gameGrid[tX][tY].state = 'open' + this.gameGrid[tX][tY].adj;
+                        this.gameGrid[tX][tY].dirty = true;
+                        this.winCountdown--;
+                    }
+                }
             }
         }
     }
 
-    this.gameGrid[iX][iY].state = 'open' + mineCount;
+    this.gameGrid[iX][iY].state = 'open' + this.gameGrid[iX][iY].adj;
 
     this.winCountdown--;
 
-    if (this.winCountdown <= 0) {
-        this.gameState = 'win'
-        this.face = 'facewin';
-        this.showMines();
-    }
 };
 
 Game.prototype.clickAt = function (iX, iY) {
@@ -275,7 +272,15 @@ Game.prototype.clickAt = function (iX, iY) {
             this.face = 'facedead';
         } else {
             this.openSurrounding(gridX, gridY);
+            this.unDirty();
 
+            console.log('cd=' + this.winCountdown);
+
+            if (this.winCountdown <= 0) {
+                this.gameState = 'win'
+                this.face = 'facewin';
+                this.showMines();
+            }
         }
 
     }
