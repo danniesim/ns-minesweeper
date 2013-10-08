@@ -103,12 +103,22 @@ function Game(iIface) {
 
     this.images = {};
 
+    this.numTiles = {x:9, y:9};
+    this.numMines = Math.floor((this.numTiles.x * this.numTiles.y) * 0.2);
+
+    this.restart();
+
+}
+
+Game.prototype.restart = function() {
 //    this.numTiles = 3;
     // jpg size is 251, but we set 250 so get 1px overlap - firefox rendering glitch or we see gaps between tiles
-    this.TILE_WIDTH = 16;
-    this.numTiles = {x:4, y:4};
+    this.TILE_WIDTH = 32;
+
     this.worldPx = {x:this.TILE_WIDTH * this.numTiles.x, y:this.TILE_WIDTH * this.numTiles.y};
-    this.numMines = 2;
+
+    this.FACE_WIDTH = 52;
+    this.GRID_BORDER_PX_BOT = 32;
 
 
     this.frameNumber = 0;
@@ -129,8 +139,15 @@ function Game(iIface) {
     }
 
     for (var mineIdx = 0; mineIdx < this.numMines; mineIdx++) {
+
         var mineX = Math.floor(Math.random() * this.numTiles.x);
         var mineY = Math.floor(Math.random() * this.numTiles.y);
+
+        while (this.gameGrid[mineX][mineY].mine == true) {
+            mineX = Math.floor(Math.random() * this.numTiles.x);
+            mineY = Math.floor(Math.random() * this.numTiles.y);
+        }
+
         console.log('Mine at: ' + mineX + ',' + mineY);
         this.gameGrid[mineX][mineY].mine = true;
     }
@@ -145,9 +162,8 @@ function Game(iIface) {
 
     this.gameState = 'alive';
     this.face = 'facesmile';
-    this.winCountdown = (this.numTiles.x * this.numTiles.y) - this.numMines;
-
-}
+    this.toWinCount = (this.numTiles.x * this.numTiles.y) - this.numMines;
+};
 
 Game.prototype.updateContainer = function() {
 
@@ -187,6 +203,23 @@ Game.prototype.unDirty = function () {
 
     }
 
+};
+
+Game.prototype.checkWin = function () {
+    var winCount = 0;
+    for (var i = 0; i < this.numTiles.x; i++) {
+        for (var j = 0; j < this.numTiles.y; j++) {
+            if (this.gameGrid[i][j].state.substring(0, 4) == 'open') {
+                winCount++;
+            }
+        }
+    }
+
+    if (winCount >= this.toWinCount) {
+        this.gameState = 'win';
+        this.face = 'facewin';
+        this.showMines();
+    }
 };
 
 Game.prototype.countSurrounding = function (iX, iY) {
@@ -229,15 +262,15 @@ Game.prototype.openSurrounding = function (iX, iY) {
             if (this.checkInGrid(tX, tY)){
                 if (this.gameGrid[tX][tY].adj == 0) {
                     if (this.gameGrid[tX][tY].mine != true) {
-                        if (this.gameGrid[tX][tY].dirty != true) {
-                            this.openSurrounding(tX, tY);
-                        }
+
+                          this.openSurrounding(tX, tY);
+
                     }
                 } else if (this.gameGrid[tX][tY].mine != true){
                     if (this.gameGrid[tX][tY].dirty != true) {
                         this.gameGrid[tX][tY].state = 'open' + this.gameGrid[tX][tY].adj;
                         this.gameGrid[tX][tY].dirty = true;
-                        this.winCountdown--;
+
                     }
                 }
             }
@@ -246,11 +279,21 @@ Game.prototype.openSurrounding = function (iX, iY) {
 
     this.gameGrid[iX][iY].state = 'open' + this.gameGrid[iX][iY].adj;
 
-    this.winCountdown--;
+
 
 };
 
 Game.prototype.clickAt = function (iX, iY) {
+    var offsetX = this.vpOffset.x;
+    var offsetY = this.vpOffset.y;
+    var faceX = offsetX - (this.FACE_WIDTH/2);
+    var faceY = offsetY - (this.FACE_WIDTH) - (this.worldPx.y/2) - this.GRID_BORDER_PX_BOT;
+
+    if ((iX > faceX && faceX > iX - this.FACE_WIDTH) && (iY > faceY && faceY > iY - this.FACE_WIDTH)) {
+        this.restart();
+        this.updateContainer();
+        return;
+    }
 
     if (this.gameState != 'alive') {
         return;
@@ -274,13 +317,9 @@ Game.prototype.clickAt = function (iX, iY) {
             this.openSurrounding(gridX, gridY);
             this.unDirty();
 
-            console.log('cd=' + this.winCountdown);
+//            console.log('cd=' + this.winCountdown);
 
-            if (this.winCountdown <= 0) {
-                this.gameState = 'win'
-                this.face = 'facewin';
-                this.showMines();
-            }
+            this.checkWin();
         }
 
     }
@@ -290,6 +329,23 @@ Game.prototype.clickAt = function (iX, iY) {
 };
 
 Game.prototype.dragStart = function (iX, iY) {
+//    var gridX = Math.floor((iX + (this.worldPx.x/2) - this.vpOffset.x)/ this.TILE_WIDTH);
+//    var gridY = Math.floor((iY + (this.worldPx.y/2) - this.vpOffset.y)/ this.TILE_WIDTH);
+//    if (this.checkInGrid(gridX, gridY) == false) {
+//        this.dragOn = true;
+//    } else {
+//        this.dragOn = false;
+//    }
+
+    this.dragOn = false;
+    var offsetX = this.vpOffset.x;
+    var offsetY = this.vpOffset.y;
+    var faceX = offsetX - (this.FACE_WIDTH/2);
+    var faceY = offsetY - (this.FACE_WIDTH) - (this.worldPx.y/2) - this.GRID_BORDER_PX_BOT;
+
+    if ((iX > faceX && faceX > iX - this.FACE_WIDTH) && (iY > faceY && faceY > iY - this.FACE_WIDTH)) {
+        this.dragOn = true;
+    }
 
 };
 
@@ -305,8 +361,28 @@ Game.prototype.drag = function(iX, iY) {
 };
 
 Game.prototype.dragStop = function(iX, iY) {
+    if (this.dragOn == true) {
+
+         if (this.numTiles.x == 9) {
+            this.numTiles.x = 6;
+            this.numTiles.y = 6;
+             this.numMines = Math.floor((this.numTiles.x * this.numTiles.y) * 0.15);
+        } else if (this.numTiles.x == 6) {
+            this.numTiles.x = 3;
+            this.numTiles.y = 3;
+             this.numMines = Math.floor((this.numTiles.x * this.numTiles.y) * 0.2);
+        } else {
+            this.numTiles.x = 9;
+            this.numTiles.y = 9;
+             this.numMines = Math.floor((this.numTiles.x * this.numTiles.y) * 0.34);
+        }
+
+        this.restart();
+        this.updateContainer();
 
 
+    }
+    this.dragOn = false;
 };
 
 Game.prototype.realStart = function() {
@@ -399,8 +475,6 @@ Game.prototype.drawAnimate = function() {
         }
     }
 
-    this.FACE_WIDTH = 26;
-    this.GRID_BORDER_PX_BOT = 16;
     // Draw Face
     var faceX = offsetX - (this.FACE_WIDTH/2);
     var faceY = offsetY - (this.FACE_WIDTH) - (this.worldPx.y/2) - this.GRID_BORDER_PX_BOT;
